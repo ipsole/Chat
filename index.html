@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Chat Demo</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #121212;
+            color: #e0e0e0;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .chat-container {
+            width: 90%;
+            max-width: 600px;
+            height: 90vh;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #333;
+            border-radius: 10px;
+            background-color: #1e1e1e;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+        .chat-box {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+            border-bottom: 1px solid #333;
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            border-radius: 20px;
+            max-width: 75%;
+            word-wrap: break-word;
+        }
+        .message .author {
+            font-weight: bold;
+            font-size: 0.8rem;
+            color: #bb86fc;
+            margin-bottom: 5px;
+        }
+        .input-area {
+            display: flex;
+            padding: 15px;
+        }
+        #messageInput {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #333;
+            border-radius: 20px;
+            background-color: #333;
+            color: #e0e0e0;
+            font-size: 1rem;
+            margin-right: 10px;
+        }
+        #sendButton {
+            padding: 10px 20px;
+            border-radius: 20px;
+            border: none;
+            background-color: #03dac6;
+            color: #121212;
+            font-weight: bold;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="chat-container">
+        <div class="chat-box" id="chatBox">
+            </div>
+        <div class="input-area">
+            <input type="text" id="messageInput" placeholder="Type a message...">
+            <button id="sendButton">Send</button>
+        </div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-database.js"></script>
+
+    <script>
+        // --- 1. FIREBASE CONFIGURATION (Using a public demo database) ---
+        const firebaseConfig = {
+            databaseURL: "https://gemini-chat-demo-default-rtdb.firebaseio.com/",
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        const chatRef = database.ref("messages");
+
+        // --- 2. GET USER ID ---
+        const userId = prompt("Enter your name (this will be your ID in the chat):", "Guest");
+
+        // --- 3. GET DOM ELEMENTS ---
+        const chatBox = document.getElementById("chatBox");
+        const messageInput = document.getElementById("messageInput");
+        const sendButton = document.getElementById("sendButton");
+
+        // --- 4. SEND MESSAGE FUNCTION ---
+        function sendMessage() {
+            const messageText = messageInput.value.trim();
+            if (messageText && userId) {
+                const newMessage = {
+                    author: userId,
+                    text: messageText,
+                    timestamp: Date.now()
+                };
+                // Push the new message to the database
+                chatRef.push(newMessage);
+                messageInput.value = ""; // Clear the input
+            }
+        }
+        
+        // --- 5. LISTEN FOR NEW MESSAGES ---
+        // This is the real-time magic. It fires every time a new message is added.
+        chatRef.on("child_added", (snapshot) => {
+            const message = snapshot.val();
+            
+            const messageElement = document.createElement("div");
+            messageElement.classList.add("message");
+            
+            const authorElement = document.createElement("div");
+            authorElement.classList.add("author");
+            authorElement.innerText = message.author;
+            
+            messageElement.appendChild(authorElement);
+            messageElement.append(document.createTextNode(message.text));
+            
+            chatBox.appendChild(messageElement);
+            
+            // Auto-scroll to the bottom
+            chatBox.scrollTop = chatBox.scrollHeight;
+        });
+
+        // --- 6. EVENT LISTENERS FOR SENDING ---
+        sendButton.addEventListener("click", sendMessage);
+        messageInput.addEventListener("keyup", (event) => {
+            if (event.key === "Enter") {
+                sendMessage();
+            }
+        });
+
+    </script>
+
+</body>
+</html>
