@@ -1,90 +1,96 @@
 import streamlit as st
+import requests
 import openai
+import re
 
 # ---------------- PAGE CONFIG ----------------
-st.set_page_config(page_title="Docdril AI Chat", layout="centered")
+st.set_page_config(page_title="Docdril AI Assistant", layout="centered")
+st.title("🤖 Docdril AI Assistant")
+st.caption("AI + Real-time Weather Intelligence")
 
-# ---------------- API KEY ----------------
-if "OPENAI_API_KEY" not in st.secrets:
-    st.error("OpenAI API key not found. Please add it to Streamlit secrets.")
+# ---------------- SECRETS ----------------
+if "OPENAI_API_KEY" not in st.secrets or "OPENWEATHER_API_KEY" not in st.secrets:
+    st.error("Missing API keys. Please add them in Streamlit Secrets.")
     st.stop()
 
 openai.api_key = st.secrets["OPENAI_API_KEY"]
-MODEL = "gpt-4o-mini"
-
-# ---------------- STYLES ----------------
-st.markdown(
-    """
-    <style>
-    .chat-container { max-width: 720px; margin: auto; }
-    .user-msg {
-        background:#10b981; color:white; padding:12px 16px;
-        border-radius:18px 18px 4px 18px; margin:8px 0;
-    }
-    .ai-msg {
-        background:#ffffff; border:1px solid #e5e7eb; color:#111827;
-        padding:12px 16px; border-radius:18px 18px 18px 4px; margin:8px 0;
-    }
-    .meta { font-size:11px; color:#9ca3af; margin-bottom:6px; }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
+WEATHER_KEY = st.secrets["OPENWEATHER_API_KEY"]
 
 # ---------------- SESSION STATE ----------------
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "assistant", "content": "Hello! I am your AI assistant. How can I help you today?"}
+        {"role": "assistant", "content": "Hello! Ask me anything — I can also tell real-time weather 🌦️"}
     ]
 
-# ---------------- HEADER ----------------
-st.markdown("## 🤖 Docdril AI Chat")
-st.caption("Powered by OpenAI")
+# ---------------- HELPERS ----------------
+def extract_city(text):
+    match = re.search(r"in ([a-zA-Z ]+)", text.lower())
+    return match.group(1).title() if match else None
 
-if st.button("🗑 Clear Chat"):
-    st.session_state.messages = [
-        {"role": "assistant", "content": "Chat cleared. How else can I help?"}
-    ]
-    st.rerun()
+def get_weather(city):
+    url = (
+        "https://api.openweathermap.org/data/2.5/weather"
+        f"?q={city}&appid={WEATHER_KEY}&units=metric"
+    )
+    r = requests.get(url)
+    if r.status_code != 200:
+        return None
 
-# ---------------- CHAT ----------------
-st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+    data = r.json()
+    return {
+        "city": city,
+        "temp": data["main"]["temp"],
+        "condition": data["weather"][0]["description"].title(),
+        "humidity": data["main"]["humidity"],
+        "wind": data["wind"]["speed"]
+    }
 
+def openai_reply(messages):
+    response = openai.ChatCompletion.create(
+        model="gpt-4o-mini",
+        messages=messages,
+        temperature=0.7
+    )
+    return response.choices[0].message["content"]
+
+# ---------------- CHAT DISPLAY ----------------
 for msg in st.session_state.messages:
-    if msg["role"] == "user":
-        st.markdown(
-            f'<div class="user-msg">{msg["content"]}</div><div class="meta">You</div>',
-            unsafe_allow_html=True
-        )
-    else:
-        st.markdown(
-            f'<div class="ai-msg">{msg["content"]}</div><div class="meta">AI</div>',
-            unsafe_allow_html=True
-        )
-
-st.markdown('</div>', unsafe_allow_html=True)
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
 
 # ---------------- INPUT ----------------
-with st.form("chat_form", clear_on_submit=True):
-    user_input = st.text_input("Ask anything…", "")
-    send = st.form_submit_button("Send")
+user_input = st.chat_input("Ask anything…")
 
-if send and user_input.strip():
+if user_input:
     st.session_state.messages.append({"role": "user", "content": user_input})
+    with st.chat_message("user"):
+        st.markdown(user_input)
 
-    with st.spinner("Thinking…"):
-        try:
-            response = openai.ChatCompletion.create(
-                model=MODEL,
-                messages=[
-                    {"role": "system", "content": "You are a helpful and professional AI assistant."},
-                    *st.session_state.messages
-                ],
-                temperature=0.7
-            )
-            ai_reply = response.choices[0].message["content"]
-        except Exception as e:
-            ai_reply = f"⚠️ Error: {e}"
+    response_text = ""
 
-    st.session_state.messages.append({"role": "assistant", "content": ai_reply})
-    st.rerun()
+    # WEATHER INTENT CHECK
+    if "weather" in user_input.lower() or "temperature" in user_input.lower():
+        city = extract_city(user_input)
+        if city:
+            weather = get_weather(city)
+            if weather:
+                response_text = (
+                    f"🌍 **Weather in {weather['city']}**\n\n"
+                    f"🌡️ Temperature: **{weather['temp']}°C**\n"
+                    f"☁️ Condition: **{weather['condition']}**\n"
+                    f"💧 Humidity: **{weather['humidity']}%**\n"
+                    f"🌬️ Wind Speed: **{weather['wind']} m/s**"
+                )
+            else:
+                response_text = "❌ I couldn’t find weather data for that place."
+        else:
+            response_text = "Please mention a city name (e.g., *weather in Mumbai*)."
+    else:
+        response_text = openai_reply(
+            [{"role": "system", "content": "You are a helpful assistant."}]
+            + st.session_state.messages
+        )
+
+    st.session_state.messages.append({"role": "assistant", "content": response_text})
+    with st.chat_message("assistant"):
+        st.markdown(response_text)
