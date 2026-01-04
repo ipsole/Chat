@@ -1,105 +1,143 @@
+import os
 import streamlit as st
 import requests
-import openai
+from openai import OpenAI
+from datetime import datetime
 
-# ---------------- PAGE CONFIG ----------------
-st.set_page_config(page_title="Docdril Weather AI", layout="centered")
-st.title("🌦️ Docdril Weather AI")
-st.caption("Ask in natural language. Get real-time weather.")
+# --- Page Configuration ---
+st.set_page_config(
+    page_title="AI & Weather Assistant",
+    page_icon="🌤️",
+    layout="centered"
+)
 
-# ---------------- SECRETS ----------------
-if "OPENAI_API_KEY" not in st.secrets or "OPENWEATHER_API_KEY" not in st.secrets:
-    st.error("Missing API keys. Add them in Streamlit Secrets.")
-    st.stop()
-
-openai.api_key = st.secrets["OPENAI_API_KEY"]
-WEATHER_KEY = st.secrets["OPENWEATHER_API_KEY"]
-
-# ---------------- SESSION STATE ----------------
-if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {
-            "role": "assistant",
-            "content": "Hi 👋 Ask me about the weather of any city (e.g. *What’s the weather in Mumbai?*)"
-        }
-    ]
-
-# ---------------- FUNCTIONS ----------------
-def extract_city_with_ai(user_text):
-    """
-    Use OpenAI ONLY to extract city name.
-    """
-    response = openai.ChatCompletion.create(
-        model="gpt-4o-mini",
-        messages=[
-            {
-                "role": "system",
-                "content": "Extract ONLY the city name from the user message. If no city is mentioned, respond with NONE."
-            },
-            {"role": "user", "content": user_text}
-        ],
-        temperature=0
-    )
-
-    city = response.choices[0].message["content"].strip()
-    return None if city.upper() == "NONE" else city
-
-
-def get_weather(city):
-    url = (
-        "https://api.openweathermap.org/data/2.5/weather"
-        f"?q={city}&appid={WEATHER_KEY}&units=metric"
-    )
-    r = requests.get(url)
-    if r.status_code != 200:
-        return None
-
-    data = r.json()
-    return {
-        "city": data["name"],
-        "temp": data["main"]["temp"],
-        "feels": data["main"]["feels_like"],
-        "condition": data["weather"][0]["description"].title(),
-        "humidity": data["main"]["humidity"],
-        "wind": data["wind"]["speed"]
+# --- Custom Styling ---
+st.markdown("""
+    <style>
+    .main {
+        background-color: #f8f9fa;
     }
+    .stChatMessage {
+        border-radius: 15px;
+        padding: 10px;
+        margin-bottom: 10px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
+# --- Helper Functions ---
 
-def format_weather(w):
-    return (
-        f"🌍 **Weather in {w['city']}**\n\n"
-        f"🌡️ Temperature: **{w['temp']}°C**\n"
-        f"🤒 Feels Like: **{w['feels']}°C**\n"
-        f"☁️ Condition: **{w['condition']}**\n"
-        f"💧 Humidity: **{w['humidity']}%**\n"
-        f"🌬️ Wind Speed: **{w['wind']} m/s**"
-    )
-
-# ---------------- CHAT DISPLAY ----------------
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
-
-# ---------------- INPUT ----------------
-user_input = st.chat_input("Ask about weather of any city…")
-
-if user_input:
-    st.session_state.messages.append({"role": "user", "content": user_input})
-    with st.chat_message("user"):
-        st.markdown(user_input)
-
-    with st.spinner("Fetching real-time weather..."):
-        city = extract_city_with_ai(user_input)
-
-        if not city:
-            reply = "❌ Please mention a city name (e.g. *weather in Delhi*)."
+def get_weather(city, api_key):
+    """Fetch current weather data from OpenWeatherMap."""
+    if not api_key:
+        return "⚠️ Weather API key is missing."
+    
+    url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={api_key}&units=metric"
+    try:
+        response = requests.get(url)
+        data = response.json()
+        
+        if response.status_code == 200:
+            temp = data['main']['temp']
+            desc = data['weather'][0]['description']
+            humidity = data['main']['humidity']
+            wind = data['wind']['speed']
+            return (f"The current weather in **{city.title()}** is {desc} with a temperature of **{temp}°C**. "
+                    f"Humidity is at {humidity}% and wind speed is {wind} m/s.")
         else:
-            weather = get_weather(city)
-            if not weather:
-                reply = f"❌ I couldn’t find weather data for **{city}**."
-            else:
-                reply = format_weather(weather)
+            return f"⚠️ Could not find weather for '{city}'. (Error: {data.get('message', 'Unknown')})"
+    except Exception as e:
+        return f"⚠️ Error fetching weather: {str(e)}"
 
-    st.session_state.messages.append({"role": "assistant", "content": reply})
+# --- Sidebar: API Keys & Settings ---
+with st.sidebar:
+    st.title("⚙️ Settings")
+    st.markdown("Enter your API keys below to enable features.")
+    
+    openai_key = st.text_input("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", type="password", placeholder="sk-...")
+    weather_key = st.text_input("90c79b684ef8183616c24326a8ce5c59", type="password", placeholder="Paste key here...")
+    
+    st.divider()
+    model_choice = st.selectbox("Select Model", ["gpt-4o-mini", "gpt-4o"], index=0)
+    
+    if st.button("Clear Conversation"):
+        st.session_state.messages = []
+        st.rerun()
+
+# --- Initialize Session State ---
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# --- Main UI ---
+st.title("🌤️ AI & Weather Assistant")
+st.caption("Ask me about the weather or chat about anything else!")
+
+# Display chat history
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+# --- Chat Logic ---
+if prompt := st.chat_input("What's the weather like in London?"):
+    # Check for API keys
+    if not openai_key:
+        st.error("Please provide an OpenAI API Key in the sidebar.")
+        st.stop()
+
+    # Display user message
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    # 1. Natural Language Intent Detection (Simple approach)
+    # We ask the AI if the user is asking for weather, or just process normally.
+    client = OpenAI(api_key=openai_key)
+    
     with st.chat_message("assistant"):
-        st.markdown(reply)
+        with st.spinner("Thinking..."):
+            try:
+                # Intent analysis: Check if user is asking for weather
+                intent_prompt = f"Does the following text ask for a weather report for a specific city? If yes, respond ONLY with the city name. If no, respond with 'NO'. Text: '{prompt}'"
+                
+                intent_check = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role": "system", "content": "You are an intent classifier."},
+                              {"role": "user", "content": intent_prompt}]
+                )
+                
+                intent_res = intent_check.choices[0].message.content.strip().replace(".", "")
+                
+                # 2. Handle Weather or General Chat
+                if intent_res.upper() != "NO" and len(intent_res) < 50:
+                    # Weather Path
+                    weather_report = get_weather(intent_res, weather_key)
+                    
+                    # Optional: Pass weather data back to GPT to make it sound natural
+                    response = client.chat.completions.create(
+                        model=model_choice,
+                        messages=[
+                            {"role": "system", "content": "You are a helpful assistant. Use the provided weather data to answer the user's request naturally."},
+                            {"role": "user", "content": f"User asked: {prompt}. Weather data: {weather_report}"}
+                        ]
+                    )
+                    full_response = response.choices[0].message.content
+                else:
+                    # Standard Chat Path
+                    response = client.chat.completions.create(
+                        model=model_choice,
+                        messages=[
+                            {"role": "system", "content": "You are a helpful and professional AI assistant."},
+                            *st.session_state.messages
+                        ]
+                    )
+                    full_response = response.choices[0].message.content
+
+                st.markdown(full_response)
+                st.session_state.messages.append({"role": "assistant", "content": full_response})
+                
+            except Exception as e:
+                st.error(f"Error: {str(e)}")
+
+# --- Footer ---
+st.markdown("---")
+st.markdown(f"<p style='text-align: center; color: grey; font-size: 0.8rem;'>{datetime.now().year} AI Weather Bot | Built with Streamlit</p>", unsafe_allow_html=True)
