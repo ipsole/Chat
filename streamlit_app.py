@@ -10,7 +10,7 @@ if "OPENAI_API_KEY" not in st.secrets:
     st.error("OpenAI API key not found. Please add it to Streamlit secrets.")
     st.stop()
 
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+openai.api_key = st.secrets["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"]
 
 MODEL = "gpt-4o-mini"
 
