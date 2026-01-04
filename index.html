@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenAI Chat Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        .scroll-smooth { scroll-behavior: smooth; }
+        .animate-in {
+            animation: fadeIn 0.3s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900 font-sans h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="flex items-center justify-between px-6 py-4 bg-white border-b border-slate-200 shadow-sm">
+        <div class="flex items-center gap-3">
+            <div class="p-2 bg-emerald-600 rounded-lg text-white">
+                <i data-lucide="bot" size="24"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-slate-800">OpenAI Chat</h1>
+                <div class="flex items-center gap-1.5">
+                    <span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+                    <span class="text-xs text-slate-500 font-medium uppercase tracking-wider">GPT-4o Mini</span>
+                </div>
+            </div>
+        </div>
+        <button id="clearChat" class="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors" title="Clear Conversation">
+            <i data-lucide="trash-2" size="20"></i>
+        </button>
+    </header>
+
+    <!-- Chat Area -->
+    <main id="chatContainer" class="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 scroll-smooth">
+        <div id="messagesList" class="max-w-3xl mx-auto space-y-6">
+            <!-- Messages will be injected here -->
+        </div>
+    </main>
+
+    <!-- Input Area -->
+    <footer class="p-4 md:p-6 bg-white border-t border-slate-200">
+        <form id="chatForm" class="max-w-3xl mx-auto relative group">
+            <input
+                id="userInput"
+                type="text"
+                placeholder="Ask anything..."
+                class="w-full pl-5 pr-14 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-inner"
+            />
+            <button
+                type="submit"
+                id="sendBtn"
+                class="absolute right-2 top-2 bottom-2 px-4 rounded-xl flex items-center justify-center transition-all bg-emerald-600 text-white hover:bg-emerald-700 shadow-md active:scale-95 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed"
+            >
+                <i data-lucide="send" size="20" id="sendIcon"></i>
+                <i data-lucide="loader-2" size="20" id="loadingIcon" class="hidden animate-spin"></i>
+            </button>
+        </form>
+        <div id="errorMessage" class="max-w-3xl mx-auto mt-4 hidden p-4 bg-red-50 border border-red-100 text-red-600 rounded-xl text-sm text-center"></div>
+    </footer>
+
+    <script>
+        // --- CONFIGURATION ---
+        const API_KEY = "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"; // PASTE YOUR OPENAI API KEY HERE
+        const MODEL = "gpt-4o-mini";
+        
+        let messages = [
+            { role: 'assistant', content: 'Hello! I am your OpenAI-powered assistant. How can I help you today?' }
+        ];
+
+        const messagesList = document.getElementById('messagesList');
+        const chatForm = document.getElementById('chatForm');
+        const userInput = document.getElementById('userInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const sendIcon = document.getElementById('sendIcon');
+        const loadingIcon = document.getElementById('loadingIcon');
+        const errorMessage = document.getElementById('errorMessage');
+        const chatContainer = document.getElementById('chatContainer');
+        const clearBtn = document.getElementById('clearChat');
+
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        function renderMessages() {
+            messagesList.innerHTML = '';
+            messages.forEach((msg) => {
+                const isUser = msg.role === 'user';
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `flex gap-4 ${isUser ? 'flex-row-reverse' : ''} animate-in`;
+                
+                messageDiv.innerHTML = `
+                    <div class="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center shadow-sm ${isUser ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-600'}">
+                        <i data-lucide="${isUser ? 'user' : 'sparkles'}" size="20"></i>
+                    </div>
+                    <div class="flex flex-col max-w-[80%] ${isUser ? 'items-end' : 'items-start'}">
+                        <div class="px-4 py-3 rounded-2xl shadow-sm text-sm md:text-base leading-relaxed ${isUser ? 'bg-emerald-600 text-white rounded-tr-none' : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none'}">
+                            <p class="whitespace-pre-wrap">${msg.content}</p>
+                        </div>
+                        <span class="text-[10px] text-slate-400 mt-1 uppercase font-semibold">
+                            ${isUser ? 'You' : 'GPT'}
+                        </span>
+                    </div>
+                `;
+                messagesList.appendChild(messageDiv);
+            });
+            lucide.createIcons();
+            scrollToBottom();
+        }
+
+        function scrollToBottom() {
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function setStates(loading) {
+            userInput.disabled = loading;
+            sendBtn.disabled = loading;
+            if (loading) {
+                sendIcon.classList.add('hidden');
+                loadingIcon.classList.remove('hidden');
+                errorMessage.classList.add('hidden');
+            } else {
+                sendIcon.classList.remove('hidden');
+                loadingIcon.classList.add('hidden');
+            }
+        }
+
+        async function fetchWithRetry(url, options, retries = 3, backoff = 1000) {
+            try {
+                const response = await fetch(url, options);
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error?.message || `HTTP error! status: ${response.status}`);
+                }
+                return await response.json();
+            } catch (err) {
+                if (retries > 0) {
+                    await new Promise(resolve => setTimeout(resolve, backoff));
+                    return fetchWithRetry(url, options, retries - 1, backoff * 2);
+                }
+                throw err;
+            }
+        }
+
+        chatForm.onsubmit = async (e) => {
+            e.preventDefault();
+            const text = userInput.value.trim();
+            if (!text || !API_KEY) {
+                if (!API_KEY) {
+                    errorMessage.textContent = "API Key is missing. Please add your OpenAI API key to the script.";
+                    errorMessage.classList.remove('hidden');
+                }
+                return;
+            }
+
+            userInput.value = '';
+            messages.push({ role: 'user', content: text });
+            renderMessages();
+            setStates(true);
+
+            try {
+                const result = await fetchWithRetry(
+                    "https://api.openai.com/v1/chat/completions",
+                    {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${API_KEY}`
+                        },
+                        body: JSON.stringify({
+                            model: MODEL,
+                            messages: [
+                                { role: "system", content: "You are a helpful and professional AI assistant." },
+                                ...messages
+                            ],
+                            temperature: 0.7
+                        })
+                    }
+                );
+
+                const aiResponse = result.choices?.[0]?.message?.content || "No response received.";
+                messages.push({ role: 'assistant', content: aiResponse });
+                renderMessages();
+            } catch (err) {
+                errorMessage.textContent = err.message || "An error occurred.";
+                errorMessage.classList.remove('hidden');
+            } finally {
+                setStates(false);
+            }
+        };
+
+        clearBtn.onclick = () => {
+            messages = [{ role: 'assistant', content: 'Chat cleared. How else can I help?' }];
+            renderMessages();
+        };
+
+        // Initial render
+        renderMessages();
+    </script>
+</body>
+</html>
