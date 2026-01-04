@@ -1,4 +1,3 @@
-
 import streamlit as st
 import openai
 
@@ -11,12 +10,11 @@ if "OPENAI_API_KEY" not in st.secrets:
     st.stop()
 
 openai.api_key = st.secrets["OPENAI_API_KEY"]
-
 MODEL = "gpt-4o-mini"
 
 # ---------------- STYLES ----------------
 st.markdown(
-    '''
+    """
     <style>
     .chat-container { max-width: 720px; margin: auto; }
     .user-msg {
@@ -29,7 +27,7 @@ st.markdown(
     }
     .meta { font-size:11px; color:#9ca3af; margin-bottom:6px; }
     </style>
-    ''',
+    """,
     unsafe_allow_html=True
 )
 
@@ -43,22 +41,26 @@ if "messages" not in st.session_state:
 st.markdown("## 🤖 Docdril AI Chat")
 st.caption("Powered by OpenAI")
 
-col1, col2 = st.columns([1, 1])
-with col2:
-    if st.button("🗑 Clear Chat"):
-        st.session_state.messages = [
-            {"role": "assistant", "content": "Chat cleared. How else can I help?"}
-        ]
-        st.experimental_rerun()
+if st.button("🗑 Clear Chat"):
+    st.session_state.messages = [
+        {"role": "assistant", "content": "Chat cleared. How else can I help?"}
+    ]
+    st.rerun()
 
-# ---------------- CHAT MESSAGES ----------------
+# ---------------- CHAT ----------------
 st.markdown('<div class="chat-container">', unsafe_allow_html=True)
 
 for msg in st.session_state.messages:
     if msg["role"] == "user":
-        st.markdown(f'<div class="user-msg">{msg["content"]}</div><div class="meta">You</div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="user-msg">{msg["content"]}</div><div class="meta">You</div>',
+            unsafe_allow_html=True
+        )
     else:
-        st.markdown(f'<div class="ai-msg">{msg["content"]}</div><div class="meta">AI</div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="ai-msg">{msg["content"]}</div><div class="meta">AI</div>',
+            unsafe_allow_html=True
+        )
 
 st.markdown('</div>', unsafe_allow_html=True)
 
@@ -85,4 +87,4 @@ if send and user_input.strip():
             ai_reply = f"⚠️ Error: {e}"
 
     st.session_state.messages.append({"role": "assistant", "content": ai_reply})
-    st.experimental_rerun()
+    st.rerun()
