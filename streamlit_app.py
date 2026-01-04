@@ -5,7 +5,7 @@ from openai import OpenAI
 # ---------------- CONFIG ----------------
 st.set_page_config(page_title="Docdril AI Chat", layout="centered")
 
-client = OpenAI(api_key=st.secrets.get("OPENAI_API_KEY", None))
+client = OpenAI(api_key=st.secrets.get("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", None))
 MODEL = "gpt-4o-mini"
 
 # ---------------- STYLES ----------------
